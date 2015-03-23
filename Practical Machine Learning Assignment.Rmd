@@ -1,0 +1,122 @@
+---
+title: "Practical Machine Learning Project"
+author: "Roy Chen"
+date: "Sunday, March 22, 2015"
+output: html_document
+---
+
+##Summary of project:
+
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: 
+http://groupware.les.inf.puc-rio.br/har. 
+
+In this project, I attempt to predict the manner in which people do exercise as supplied byt the training/testing data from above. 
+I will describe how I built the model, used cross validation, and explain what I think the expected out of sample error is, and why I made the choices I did. 
+I will also use the prediction model to predict 20 different test cases. 
+
+##Data Processing:
+
+```{r import files and processing, echo = TRUE}
+library(lattice)
+library(ggplot2)
+library(caret)
+
+training <- read.csv("pml-training.csv", header = TRUE, 
+        stringsAsFactors = FALSE)
+
+testing <- read.csv("pml-testing.csv", header = TRUE,
+        stringsAsFactors = FALSE)
+
+#str(training)
+#training has 19622 obs, 160 variables
+
+#set factors
+training$user_name <- as.factor(training$user_name)
+training$classe <- as.factor(training$classe)
+training$cvtd_timestamp <- as.factor(training$cvtd_timestamp)
+training$new_window <- as.factor(training$new_window)
+
+#str(testing)
+#testing has 20 obs, 160 variables
+
+#set factors for testing
+testing$user_name <- as.factor(testing$user_name)
+testing$cvtd_timestamp <- as.factor(testing$cvtd_timestamp)
+testing$new_window <- as.factor(testing$new_window)
+
+#index of columns with NA's
+cols.na <- apply(!is.na(training), 2, all)
+training <- training[,cols.na] #down from 160 to 93 variables
+testing <- testing[,cols.na] #93 as well
+
+#removed column "X" which are the row numbers
+training <- training[,-1]
+testing <- testing[,-1]
+
+#index of columns that contain numeric values
+cols.ind <- sapply(training, is.numeric)
+
+#preprocessing training:
+pre.proc <- preProcess(training[,cols.ind], method = c("center", "scale", 
+        "medianImpute"))
+new.training <- predict(pre.proc, training[,cols.ind])
+new.training <- cbind(user_name = training$user_name, cvtd_timestamp = 
+        training$cvtd_timestamp, new_window = training$new_window,new.training)
+
+#preprocessing testing set:
+new.testing <- predict(pre.proc, testing[,cols.ind])
+new.testing <- cbind(user_name = testing$user_name, cvtd_timestamp = 
+        testing$cvtd_timestamp, new_window = testing$new_window,new.testing)
+```
+
+##Training Model:
+
+Now that the training and testing sets have been processded accordingly, I proceed with building the model.
+
+```{r model training, echo = TRUE}
+set.seed(9876)
+
+train.cont <- trainControl(method = "cv") #cross validation
+
+fit <- train(training[,]$classe ~ ., method = "ctree", 
+             data = new.training[,], trControl = train.cont)
+```
+
+Let's take a look at the fit results:
+
+```{r model results, echo = TRUE}
+fit$results
+```
+
+This shows that the out of sample error is 2.1% based on the best model with mincriterion = 0.50 and accuracy at 97.9%.
+
+##Predicting of test set:
+
+```{r predicting test sets, echo = TRUE}
+predict.testing <- predict(fit, new.testing)
+predict.testing
+```
+
+
+##Printing results for submission:
+
+```{r submission, echo = TRUE}
+#save answers as character vectors:
+answers <- predict.testing
+
+#from coursera project assignment page
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers)
+```
